@@ -12,7 +12,7 @@
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
 
-    <title>Tuner · Box3D</title>
+    <title>Tune3D</title>
 
     <style>
 
@@ -570,6 +570,10 @@
 
         overflow: hidden;
 
+        min-height: 0;
+
+        touch-action: pan-y;
+
       }
 
 
@@ -638,13 +642,45 @@
 
         flex: 1 1 auto;
 
+        min-height: 0;
+
         overflow-y: auto;
+
+        overflow-x: hidden;
+
+        overscroll-behavior: contain;
+
+        -webkit-overflow-scrolling: touch;
 
         display: flex;
 
         flex-direction: column;
 
-        gap: 4px;
+        gap: 8px;
+
+        padding-right: 4px;
+
+        scrollbar-width: thin;
+
+        scrollbar-color: rgba(88, 160, 255, 0.35) transparent;
+
+      }
+
+
+
+      #instrumentList::-webkit-scrollbar {
+
+        width: 6px;
+
+      }
+
+
+
+      #instrumentList::-webkit-scrollbar-thumb {
+
+        background: rgba(88, 160, 255, 0.35);
+
+        border-radius: 999px;
 
       }
 
@@ -687,6 +723,174 @@
         color: #e8f2ff;
 
         box-shadow: 0 0 16px rgba(88, 160, 255, 0.12);
+
+      }
+
+
+
+      .instrument-group {
+
+        border: 1px solid rgba(88, 160, 255, 0.12);
+
+        border-radius: 12px;
+
+        background: rgba(8, 14, 26, 0.55);
+
+        overflow: hidden;
+
+      }
+
+
+
+      .instrument-group.has-active {
+
+        border-color: rgba(88, 160, 255, 0.32);
+
+      }
+
+
+
+      .instrument-group-toggle {
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 12px;
+
+        width: 100%;
+
+        border: none;
+
+        background: transparent;
+
+        color: #b8c2d6;
+
+        padding: 10px 12px;
+
+        cursor: pointer;
+
+        text-align: left;
+
+      }
+
+
+
+      .instrument-group-toggle:hover {
+
+        background: rgba(255, 255, 255, 0.03);
+
+      }
+
+
+
+      .instrument-group.has-active .instrument-group-toggle {
+
+        color: #e8f2ff;
+
+      }
+
+
+
+      .instrument-group-chevron {
+
+        margin-left: auto;
+
+        width: 8px;
+
+        height: 8px;
+
+        border-right: 2px solid #6a7a96;
+
+        border-bottom: 2px solid #6a7a96;
+
+        transform: rotate(45deg);
+
+        transition: transform 0.2s;
+
+        flex-shrink: 0;
+
+      }
+
+
+
+      .instrument-group.open .instrument-group-chevron {
+
+        transform: rotate(-135deg);
+
+        margin-top: 4px;
+
+      }
+
+
+
+      .instrument-group-panel {
+
+        display: none;
+
+        flex-direction: column;
+
+        gap: 2px;
+
+        padding: 0 8px 8px;
+
+        border-top: 1px solid rgba(88, 160, 255, 0.1);
+
+      }
+
+
+
+      .instrument-group.open .instrument-group-panel {
+
+        display: flex;
+
+      }
+
+
+
+      .preset-item {
+
+        width: 100%;
+
+        border: 1px solid transparent;
+
+        border-radius: 8px;
+
+        background: transparent;
+
+        color: #9aa8c0;
+
+        padding: 8px 10px 8px 36px;
+
+        font-size: 0.84rem;
+
+        font-weight: 600;
+
+        text-align: left;
+
+        cursor: pointer;
+
+      }
+
+
+
+      .preset-item:hover {
+
+        background: rgba(255, 255, 255, 0.04);
+
+        color: #d8e4f4;
+
+      }
+
+
+
+      .preset-item.active {
+
+        background: rgba(40, 80, 140, 0.35);
+
+        border-color: rgba(88, 160, 255, 0.45);
+
+        color: #e8f2ff;
 
       }
 
@@ -741,6 +945,14 @@
         border-top: 1px solid rgba(88, 160, 255, 0.12);
 
         padding-top: 12px;
+
+        max-height: 28vh;
+
+        overflow-y: auto;
+
+        overscroll-behavior: contain;
+
+        -webkit-overflow-scrolling: touch;
 
       }
 
@@ -1006,7 +1218,7 @@
 
     <div id="overlay">
 
-      <h1>Box3D Tuner</h1>
+      <h1>Tune3D</h1>
 
       <p>
 
