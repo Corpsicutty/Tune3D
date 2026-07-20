@@ -10,6 +10,8 @@ import {
 
   HemisphericLight,
 
+  Material,
+
   Mesh,
 
   MeshBuilder,
@@ -18,6 +20,8 @@ import {
 
   Scene,
 
+  SceneLoader,
+
   StandardMaterial,
 
   TransformNode,
@@ -25,6 +29,8 @@ import {
   Vector3,
 
 } from '@babylonjs/core';
+
+import '@babylonjs/loaders/glTF';
 
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 
@@ -47,6 +53,8 @@ const CENTS_SPAN = 50;
 const OUTER_RADIUS = 2.35;
 
 const BALL_RADIUS = 0.14;
+
+const BALL_GLB_URL = '/models/tuner-marble.glb';
 
 const RING_STEP = 5;
 const RING_CENTS: number[] = [];
@@ -185,22 +193,139 @@ function ballTuneColor(cents: number, hasSignal: boolean): Color3 {
 
 
 function applyBallColor(
-  mat: PBRMaterial,
-  coreMat: StandardMaterial,
+  shellMat: PBRMaterial | null,
+  coreMat: Material | null,
   color: Color3,
   hasSignal: boolean,
   cents: number,
   breathe: number,
+  volumeLevel: number,
 ): void {
   const inTune = hasSignal && Math.abs(cents) <= IN_TUNE_CENTS;
-  mat.albedoColor = color.scale(hasSignal ? 0.3 : 0.22);
-  mat.emissiveColor = color.scale(hasSignal ? 0.45 : 0.4);
-  mat.emissiveIntensity = (hasSignal ? 0.9 : 1.2) * breathe;
-  mat.roughness = hasSignal ? 0.035 : 0.02;
-  mat.alpha = inTune ? 0.66 : 0.74;
-  mat.clearCoat.intensity = inTune ? 1.2 : 1;
-  mat.clearCoat.roughness = 0.01;
-  coreMat.emissiveColor = color.scale(hasSignal ? 0.9 : 0.75);
+  if (shellMat) {
+    shellMat.albedoColor = color.scale(hasSignal ? 0.3 : 0.22);
+    shellMat.emissiveColor = color.scale(hasSignal ? 0.45 : 0.4);
+    shellMat.emissiveIntensity = (hasSignal ? 0.9 : 1.2) * breathe;
+    shellMat.roughness = hasSignal ? 0.035 : 0.02;
+    shellMat.alpha = inTune ? 0.66 : 0.74;
+    if (!shellMat.clearCoat.isEnabled) shellMat.clearCoat.isEnabled = true;
+    shellMat.clearCoat.intensity = inTune ? 1.2 : 1;
+    shellMat.clearCoat.roughness = 0.01;
+  }
+  const coreAlpha = 0.72 + volumeLevel * 0.18 + (hasSignal ? 0 : breathe * 0.08);
+  const coreTint = color.scale(hasSignal ? 0.9 : 0.75);
+  if (coreMat instanceof PBRMaterial) {
+    coreMat.emissiveColor = coreTint;
+    coreMat.emissiveIntensity = (hasSignal ? 2.0 : 2.4) * breathe;
+    coreMat.alpha = coreAlpha;
+  } else if (coreMat instanceof StandardMaterial) {
+    coreMat.emissiveColor = coreTint;
+    coreMat.alpha = coreAlpha;
+  }
+}
+
+type BallVisual = {
+  root: TransformNode;
+  shellMat: PBRMaterial | null;
+  coreMat: Material | null;
+  ballGlow: Mesh;
+  ballGlowMat: StandardMaterial;
+};
+
+function createProceduralBallVisual(scene: Scene, parent: TransformNode): BallVisual {
+  const root = new TransformNode('tuner-ball-root', scene);
+  root.parent = parent;
+
+  const ballMat = makeBallMat(scene);
+  const ball = MeshBuilder.CreateSphere('tuner-ball', { diameter: BALL_RADIUS * 2, segments: 32 }, scene);
+  ball.parent = root;
+  ball.material = ballMat;
+
+  const ballCoreMat = makeBallCoreMat(scene);
+  const ballCore = MeshBuilder.CreateSphere('ball-core', { diameter: BALL_RADIUS * 1.38, segments: 24 }, scene);
+  ballCore.parent = root;
+  ballCore.position.set(BALL_RADIUS * 0.24, BALL_RADIUS * 0.3, -BALL_RADIUS * 0.2);
+  ballCore.material = ballCoreMat;
+
+  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
+  ballGlowMat.alpha = 0.32;
+  const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 4.2, segments: 24 }, scene);
+  ballGlow.parent = root;
+  ballGlow.material = ballGlowMat;
+
+  return { root, shellMat: ballMat, coreMat: ballCoreMat, ballGlow, ballGlowMat };
+}
+
+async function loadBallVisual(scene: Scene, parent: TransformNode): Promise<BallVisual> {
+  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
+  ballGlowMat.alpha = 0.32;
+
+  try {
+    const result = await SceneLoader.ImportMeshAsync('', BALL_GLB_URL, '', scene);
+    const root = new TransformNode('tuner-ball-root', scene);
+    root.parent = parent;
+
+    let shellMesh: Mesh | null = null;
+    let coreMesh: Mesh | null = null;
+
+    for (const mesh of result.meshes) {
+      if (!(mesh instanceof Mesh) || mesh.name === '__root__') continue;
+      if (mesh.name.includes('Core') || mesh.name.includes('.001')) {
+        coreMesh = mesh;
+      } else if (mesh.name.includes('TestMarble') || mesh.name.includes('Sphere')) {
+        shellMesh = mesh;
+      }
+    }
+
+    if (!shellMesh) {
+      const meshes = result.meshes.filter((m): m is Mesh => m instanceof Mesh && m.name !== '__root__');
+      meshes.sort(
+        (a, b) =>
+          b.getBoundingInfo().boundingBox.extendSize.length() -
+          a.getBoundingInfo().boundingBox.extendSize.length(),
+      );
+      shellMesh = meshes[0] ?? null;
+      coreMesh = meshes[1] ?? null;
+    }
+
+    if (!shellMesh) throw new Error('No shell mesh in GLB');
+
+    for (const mesh of [shellMesh, coreMesh]) {
+      if (!mesh) continue;
+      mesh.parent = root;
+      mesh.rotation.x = 0;
+      mesh.rotation.y = 0;
+      mesh.rotation.z = 0;
+    }
+
+    for (const mesh of result.meshes) {
+      if (mesh !== shellMesh && mesh !== coreMesh && (mesh.name === '__root__' || mesh.getTotalVertices() === 0)) {
+        mesh.dispose();
+      }
+    }
+
+    const ext = shellMesh.getBoundingInfo().boundingBox.extendSize;
+    const diameter = Math.max(ext.x, ext.y, ext.z) * 2;
+    const target = BALL_RADIUS * 2;
+    if (diameter > 0 && Math.abs(diameter - target) > 0.01) {
+      root.scaling.setAll(target / diameter);
+    }
+
+    shellMesh.name = 'tuner-ball-shell';
+    if (coreMesh) coreMesh.name = 'tuner-ball-core';
+
+    const shellMat = shellMesh.material instanceof PBRMaterial ? shellMesh.material : null;
+    const coreMat = coreMesh?.material ?? null;
+
+    const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 4.2, segments: 24 }, scene);
+    ballGlow.parent = root;
+    ballGlow.material = ballGlowMat;
+
+    return { root, shellMat, coreMat, ballGlow, ballGlowMat };
+  } catch (err) {
+    console.warn('Failed to load tuner marble GLB, using procedural fallback:', err);
+    return createProceduralBallVisual(scene, parent);
+  }
 }
 
 
@@ -429,16 +554,6 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
   tunerRoot: TransformNode;
 
-  ball: Mesh;
-
-  ballMat: PBRMaterial;
-
-  ballCoreMat: StandardMaterial;
-
-  ballGlow: Mesh;
-
-  ballGlowMat: StandardMaterial;
-
   rings: RingVisual[];
 
 } {
@@ -540,41 +655,7 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
   addGlowLabel(scene, tunerRoot, '♭', -OUTER_RADIUS * 0.78, OUTER_RADIUS * 0.28, '#ff8ad0', 40, true);
 
-
-
-  const ballMat = makeBallMat(scene);
-
-  const ball = MeshBuilder.CreateSphere('tuner-ball', { diameter: BALL_RADIUS * 2, segments: 32 }, scene);
-
-  ball.parent = tunerRoot;
-
-  ball.material = ballMat;
-
-  const ballCoreMat = makeBallCoreMat(scene);
-
-  const ballCore = MeshBuilder.CreateSphere('ball-core', { diameter: BALL_RADIUS * 1.38, segments: 24 }, scene);
-
-  ballCore.parent = ball;
-
-  ballCore.position.set(BALL_RADIUS * 0.24, BALL_RADIUS * 0.3, -BALL_RADIUS * 0.2);
-
-  ballCore.material = ballCoreMat;
-
-
-
-  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
-
-  ballGlowMat.alpha = 0.32;
-
-  const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 4.2, segments: 24 }, scene);
-
-  ballGlow.parent = ball;
-
-  ballGlow.material = ballGlowMat;
-
-
-
-  return { tunerRoot, ball, ballMat, ballCoreMat, ballGlow, ballGlowMat, rings };
+  return { tunerRoot, rings };
 
 }
 
@@ -598,7 +679,9 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
   const root = new TransformNode('tuner-stage', scene);
 
-  const { ball, ballMat, ballCoreMat, ballGlow, ballGlowMat, rings } = buildCircleTuner(scene, root);
+  const { tunerRoot, rings } = buildCircleTuner(scene, root);
+
+  const { root: ballRoot, shellMat, coreMat, ballGlow, ballGlowMat } = await loadBallVisual(scene, tunerRoot);
 
 
 
@@ -750,21 +833,15 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
     if (locked) scaleBoost = 1.1 + Math.sin(time * 6) * 0.04;
 
-    ball.scaling.set(stretchAmt * scaleBoost, squashAmt * scaleBoost, stretchAmt * scaleBoost);
+    ballRoot.scaling.set(stretchAmt * scaleBoost, squashAmt * scaleBoost, stretchAmt * scaleBoost);
 
-
-
-    ball.position.set(ballX, ballY, 0.06);
-
-
+    ballRoot.position.set(ballX, ballY, 0.06);
 
     const ballColor = ballTuneColor(displayCents, hasSignal);
 
     const breathe = 0.85 + Math.sin(time * 1.1) * 0.15;
 
-    applyBallColor(ballMat, ballCoreMat, ballColor, hasSignal, displayCents, breathe);
-
-    ballCoreMat.alpha = 0.72 + volumeLevel * 0.18 + (hasSignal ? 0 : breathe * 0.08);
+    applyBallColor(shellMat, coreMat, ballColor, hasSignal, displayCents, breathe, volumeLevel);
 
     ballGlowMat.emissiveColor.copyFrom(ballColor.scale(hasSignal ? 0.75 : 0.55));
     ballGlowMat.alpha = (0.22 + volumeLevel * 0.3) * (hasSignal ? 1 : breathe);
