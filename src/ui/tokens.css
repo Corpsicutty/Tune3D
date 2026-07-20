@@ -1,0 +1,80 @@
+/**
+ * Tune3D design tokens — 8px grid, sci-fi glass aesthetic
+ */
+:root {
+  /* Base palette */
+  --color-bg-deep: #05080f;
+  --color-bg-elevated: rgba(8, 14, 28, 0.72);
+  --color-bg-glass: rgba(10, 18, 34, 0.58);
+  --color-bg-drawer: rgba(6, 10, 20, 0.94);
+
+  --color-text-primary: #f4f7ff;
+  --color-text-secondary: #c8d4ea;
+  --color-text-muted: #5a7090;
+  --color-text-dim: #4a6080;
+
+  --color-cyan: #58d4ff;
+  --color-cyan-bright: #7ee4ff;
+  --color-cyan-dim: #3a9ec8;
+  --color-violet: #9b6dff;
+  --color-violet-dim: #6b48c4;
+
+  --color-green: #3de88a;
+  --color-green-glow: rgba(61, 232, 138, 0.55);
+  --color-sharp: #ffb347;
+  --color-sharp-glow: rgba(255, 179, 71, 0.55);
+  --color-flat: #ffc850;
+  --color-flat-glow: rgba(255, 200, 80, 0.55);
+
+  /* Spacing — 8px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-size-xs: 0.65rem;
+  --font-size-sm: 0.72rem;
+  --font-size-md: 0.84rem;
+  --font-size-lg: 1.05rem;
+  --font-size-xl: 1.25rem;
+  --letter-wide: 0.12em;
+  --letter-wider: 0.16em;
+
+  /* Glows & shadows */
+  --glow-cyan-sm: 0 0 12px rgba(88, 212, 255, 0.35);
+  --glow-cyan-md: 0 0 24px rgba(88, 212, 255, 0.45);
+  --glow-cyan-lg: 0 0 40px rgba(88, 212, 255, 0.35);
+  --glow-violet: 0 0 48px rgba(155, 109, 255, 0.22);
+  --shadow-glass:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 48px rgba(40, 100, 180, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --border-glass: 1px solid rgba(120, 180, 255, 0.2);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --duration-fast: 180ms;
+  --duration-normal: 280ms;
+  --duration-slow: 420ms;
+  --duration-breathe: 4.5s;
+
+  /* Layout */
+  --header-offset-top: max(52px, calc(44px + env(safe-area-inset-top)));
+  --hint-bar-height: 44px;
+  --menu-size: 44px;
+}

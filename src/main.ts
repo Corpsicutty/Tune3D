@@ -1,3 +1,6 @@
+import './ui/tokens.css';
+import './ui/components.css';
+
 import {
   ArcRotateCamera,
   Engine,
@@ -17,14 +20,18 @@ import {
 import { nearestString } from './instruments';
 import { createTunerVisual, setupTunerBloom, setupTunerLighting } from './scene/tunerVisual';
 import { createInstrumentMenu, type InstrumentSelection } from './ui/instrumentMenu';
+import { setReadoutActive, setReadoutIdle, type ReadoutElements } from './ui/readout';
 
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-const noteBarEl = document.getElementById('noteBar')!;
-const noteEl = document.getElementById('note')!;
-const freqEl = document.getElementById('freq')!;
-const centsEl = document.getElementById('cents')!;
-const directionEl = document.getElementById('direction')!;
-const statusEl = document.getElementById('status')!;
+const readoutEls: ReadoutElements = {
+  noteBar: document.getElementById('noteBar')!,
+  note: document.getElementById('note')!,
+  freq: document.getElementById('freq')!,
+  cents: document.getElementById('cents')!,
+  direction: document.getElementById('direction')!,
+  status: document.getElementById('status')!,
+};
+const statusEl = readoutEls.status;
 const startBtn = document.getElementById('startBtn')!;
 const overlay = document.getElementById('overlay')!;
 const overlayError = document.getElementById('overlayError');
@@ -70,8 +77,11 @@ try {
     preserveDrawingBuffer: true,
     stencil: true,
     adaptToDeviceRatio: true,
+    premultipliedAlpha: false,
   });
   const scene = new Scene(engine);
+  scene.autoClear = true;
+  scene.autoClearDepthAndStencil = true;
 
   const camera = new ArcRotateCamera(
     'cam',
@@ -121,20 +131,11 @@ try {
     const selection = menu.getSelection();
 
     if (!chromatic) {
-      noteEl.textContent = '—';
-      noteBarEl.style.width = '18%';
-      noteBarEl.className = 'note-bar idle';
-      freqEl.textContent = 'Hz';
-      centsEl.textContent = '—';
-      directionEl.textContent = selection.pinnedString
-        ? `Play ${selection.pinnedString.label}`
-        : 'Play a note';
-      directionEl.className = 'direction idle';
-      if (volume > 0.0015) {
-        statusEl.textContent = 'Hearing sound — hold the note';
-      } else {
-        statusEl.textContent = 'Waiting for input';
-      }
+      setReadoutIdle(readoutEls, {
+        directionText: selection.pinnedString ? `Play ${selection.pinnedString.label}` : 'Play a note',
+        statusText: 'Waiting for input',
+        hearingSound: volume > 0.0015,
+      });
       menu.setActiveString(selection.pinnedString?.id ?? null);
       tunerVisual.updateFromCents(null, volume);
       return;
@@ -144,46 +145,39 @@ try {
     menu.setActiveString(activeStringId);
     tunerVisual.updateFromCents(reading.cents, volume);
 
-    const { noteName, octave, frequency, targetFrequency, cents } = reading;
+    const { noteName, octave, frequency, cents } = reading;
     const stringHint =
       selection.instrument.strings.length > 0 && activeStringId
         ? selection.instrument.strings.find((s) => s.id === activeStringId)?.label
         : null;
 
-    noteEl.textContent = `${noteName}${octave}`;
-    noteBarEl.style.width = `${Math.min(95, 35 + Math.abs(cents) * 1.1)}%`;
-    freqEl.textContent = `${frequency.toFixed(1)} Hz`;
-    centsEl.textContent = stringHint
-      ? `${formatCents(cents)} ¢ · ${stringHint}`
-      : `${formatCents(cents)} ¢`;
-
     const dir = centsDirection(cents);
-    noteBarEl.className = 'note-bar';
-    if (dir === 'in-tune') {
-      noteBarEl.classList.add('in-tune');
-      directionEl.textContent = stringHint
-        ? `${stringHint} in tune ✓`
-        : `Centered on ${noteName}${octave} ✓`;
-      directionEl.className = 'direction in-tune';
-    } else if (dir === 'sharp') {
-      noteBarEl.classList.add('sharp');
-      directionEl.textContent = stringHint
-        ? `${stringHint} — sharp ♯`
-        : `${noteName}${octave} — sharp ♯`;
-      directionEl.className = 'direction sharp';
-    } else {
-      noteBarEl.classList.add('flat');
-      directionEl.textContent = stringHint
-        ? `${stringHint} — flat ♭`
-        : `${noteName}${octave} — a bit flat ♭`;
-      directionEl.className = 'direction flat';
-    }
+    const directionText =
+      dir === 'in-tune'
+        ? stringHint
+          ? `${stringHint} in tune ✓`
+          : `Centered on ${noteName}${octave} ✓`
+        : dir === 'sharp'
+          ? stringHint
+            ? `${stringHint} — sharp ♯`
+            : `${noteName}${octave} — sharp ♯`
+          : stringHint
+            ? `${stringHint} — flat ♭`
+            : `${noteName}${octave} — a bit flat ♭`;
 
-    statusEl.textContent = selection.pinnedString
-      ? `Locked · ${selection.instrument.shortName}`
-      : selection.instrument.strings.length > 0
-        ? `Strings · ${selection.instrument.shortName}`
-        : 'Chromatic auto';
+    setReadoutActive(readoutEls, {
+      noteText: `${noteName}${octave}`,
+      freqText: `${frequency.toFixed(1)} Hz`,
+      centsText: stringHint ? `${formatCents(cents)} ¢ · ${stringHint}` : `${formatCents(cents)} ¢`,
+      direction: dir,
+      directionText,
+      statusText: selection.pinnedString
+        ? `Locked · ${selection.instrument.shortName}`
+        : selection.instrument.strings.length > 0
+          ? `Strings · ${selection.instrument.shortName}`
+          : 'Chromatic auto',
+      barWidthPct: Math.min(95, 35 + Math.abs(cents) * 1.1),
+    });
   };
 
   startBtn.addEventListener('click', async () => {

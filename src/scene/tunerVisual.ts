@@ -147,10 +147,10 @@ function makeBallMat(scene: Scene): StandardMaterial {
 const IN_TUNE_CENTS = 5;
 const WARM_SHARP = new Color3(1, 0.42, 0.1);
 const WARM_FLAT = new Color3(1, 0.68, 0.15);
-const WARM_IDLE = new Color3(0.88, 0.52, 0.18);
+const IDLE_CYAN = new Color3(0.28, 0.58, 0.98);
 
 function ballTuneColor(cents: number, hasSignal: boolean): Color3 {
-  if (!hasSignal) return WARM_IDLE;
+  if (!hasSignal) return IDLE_CYAN;
   const abs = Math.abs(cents);
   if (abs <= IN_TUNE_CENTS) return GREEN;
   const warmEnd = cents >= 0 ? WARM_SHARP : WARM_FLAT;
@@ -160,10 +160,14 @@ function ballTuneColor(cents: number, hasSignal: boolean): Color3 {
 
 
 function applyBallColor(mat: StandardMaterial, color: Color3, hasSignal: boolean, cents: number): void {
-  mat.diffuseColor.copyFrom(color.scale(hasSignal ? 0.75 : 0.55));
-  mat.emissiveColor.copyFrom(color.scale(hasSignal ? 0.5 : 0.32));
+  mat.diffuseColor.copyFrom(color.scale(hasSignal ? 0.78 : 0.62));
+  mat.emissiveColor.copyFrom(color.scale(hasSignal ? 0.48 : 0.38));
+  mat.roughness = hasSignal ? 0.14 : 0.08;
+  mat.specularPower = hasSignal ? 112 : 128;
   if (hasSignal && Math.abs(cents) <= IN_TUNE_CENTS) {
     mat.specularColor.set(0.85, 1, 0.88);
+  } else if (!hasSignal) {
+    mat.specularColor.set(0.75, 0.92, 1);
   } else {
     mat.specularColor.set(1, 0.9, 0.72);
   }
@@ -433,7 +437,7 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
     const dimFactor = 0.45 + (i / (RING_LABELS.length - 1)) * 0.55;
 
-    const baseIntensity = isOuter ? 1.35 : 0.95;
+    const baseIntensity = isOuter ? 1.55 : 0.95;
 
     const baseColor = Color3.Lerp(CYAN_DIM, CYAN, dimFactor);
 
@@ -475,7 +479,7 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
     } else {
 
-      const tube = isOuter ? 0.048 : 0.022;
+      const tube = isOuter ? 0.052 : 0.022;
 
       const ring = MeshBuilder.CreateTorus(
 
@@ -495,7 +499,7 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
 
 
-      const glowTube = isOuter ? tube * 3.2 : tube * 2.6;
+      const glowTube = isOuter ? tube * 3.8 : tube * 2.6;
 
       glow = MeshBuilder.CreateTorus(
 
@@ -547,11 +551,11 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
 
 
-  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', WARM_IDLE);
+  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
 
-  ballGlowMat.alpha = 0.28;
+  ballGlowMat.alpha = 0.32;
 
-  const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 3.6, segments: 24 }, scene);
+  const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 4.2, segments: 24 }, scene);
 
   ballGlow.parent = ball;
 
@@ -566,23 +570,15 @@ function buildCircleTuner(scene: Scene, root: TransformNode): {
 
 
 export function setupTunerBloom(scene: Scene, camera: Camera): DefaultRenderingPipeline {
-
   const pipeline = new DefaultRenderingPipeline('tuner-bloom', true, scene, [camera]);
-
   pipeline.bloomEnabled = true;
-
-  pipeline.bloomThreshold = 0.15;
-
-  pipeline.bloomWeight = 0.45;
-
-  pipeline.bloomKernel = 48;
-
-  pipeline.bloomScale = 0.6;
-
+  pipeline.bloomThreshold = 0.06;
+  pipeline.bloomWeight = 0.72;
+  pipeline.bloomKernel = 64;
+  pipeline.bloomScale = 0.75;
   pipeline.fxaaEnabled = true;
-
+  pipeline.glowLayerEnabled = false;
   return pipeline;
-
 }
 
 
@@ -757,59 +753,38 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
     applyBallColor(ballMat, ballColor, hasSignal, displayCents);
 
-    ballGlowMat.emissiveColor.copyFrom(ballColor.scale(hasSignal ? 0.7 : 0.45));
+    const breathe = 0.85 + Math.sin(time * 1.1) * 0.15;
 
-    ballGlowMat.alpha = 0.18 + volumeLevel * 0.25;
-
-
+    ballGlowMat.emissiveColor.copyFrom(ballColor.scale(hasSignal ? 0.75 : 0.55));
+    ballGlowMat.alpha = (0.22 + volumeLevel * 0.3) * (hasSignal ? 1 : breathe);
 
     const ballDist = Math.hypot(ballX, ballY);
-
-    const glowStrength = hasSignal ? 1 : 0.55;
-
-
+    const glowStrength = hasSignal ? 1 : 0.65 * breathe;
 
     for (const ring of rings) {
-
       let proximity: number;
-
       if (ring.cents === 0) {
-
         proximity = Math.max(0, 1 - ballDist / 0.22);
-
       } else {
-
         const ringR = ringRadiusForCents(ring.cents);
-
         proximity = Math.max(0, 1 - Math.abs(ballDist - ringR) / RING_PROXIMITY);
-
       }
 
-
-
-      const targetGlow = proximity * glowStrength;
-
+      const isOuter = ring.cents === 50;
+      const breatheBoost = isOuter ? breathe : 1;
+      const targetGlow = proximity * glowStrength * breatheBoost;
       ring.glowLevel += (targetGlow - ring.glowLevel) * Math.min(1, dt * 10);
 
-
-
       const t = ring.glowLevel;
-
       const ringTint = hasSignal ? ballColor : CYAN;
       Color3.LerpToRef(ring.baseColor, ringTint, t * 0.65, _lit);
 
-      const coreIntensity = ring.baseIntensity + t * 2.2;
-
+      const coreIntensity = (ring.baseIntensity + t * 2.4) * (isOuter ? breatheBoost : 1);
       ring.mat.emissiveColor.copyFrom(_lit.scale(coreIntensity));
 
-
-
-      ring.glowMat.emissiveColor.copyFrom(_lit.scale(0.4 + t * 1.6));
-
-      ring.glowMat.alpha = 0.06 + t * 0.42;
-
-      ring.glow.scaling.setAll(1 + t * 0.08);
-
+      ring.glowMat.emissiveColor.copyFrom(_lit.scale(0.45 + t * 1.8));
+      ring.glowMat.alpha = (0.08 + t * 0.48) * (isOuter ? breatheBoost : 1);
+      ring.glow.scaling.setAll(1 + t * 0.12);
     }
 
   });
@@ -851,37 +826,25 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
 
 export function setupTunerLighting(scene: Scene): void {
-
-  scene.clearColor = new Color4(0.02, 0.04, 0.09, 1);
-
-  scene.ambientColor = new Color3(0.06, 0.08, 0.14);
-
-
+  scene.clearColor = new Color4(0.02, 0.04, 0.08, 0);
+  scene.ambientColor = new Color3(0.08, 0.1, 0.18);
 
   const hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0.2), scene);
-
-  hemi.intensity = 0.35;
-
-  hemi.diffuse = new Color3(0.5, 0.7, 1);
-
+  hemi.intensity = 0.42;
+  hemi.diffuse = new Color3(0.55, 0.75, 1);
   hemi.groundColor = new Color3(0.02, 0.03, 0.06);
 
+  const key = new DirectionalLight('key', new Vector3(-0.25, 0.45, -1), scene);
+  key.intensity = 1.05;
+  key.diffuse = new Color3(0.9, 0.95, 1);
 
+  const rim = new DirectionalLight('rim', new Vector3(0.35, 0.15, 0.85), scene);
+  rim.intensity = 0.35;
+  rim.diffuse = new Color3(0.55, 0.7, 1);
 
-  const key = new DirectionalLight('key', new Vector3(-0.3, 0.5, -1), scene);
-
-  key.intensity = 0.9;
-
-  key.diffuse = new Color3(0.85, 0.92, 1);
-
-
-
-  const rim = new DirectionalLight('rim', new Vector3(0.4, 0.2, 0.8), scene);
-
-  rim.intensity = 0.25;
-
-  rim.diffuse = new Color3(0.4, 0.65, 1);
-
+  const fill = new DirectionalLight('fill', new Vector3(0.6, -0.2, 0.5), scene);
+  fill.intensity = 0.18;
+  fill.diffuse = new Color3(0.7, 0.5, 1);
 }
 
 
