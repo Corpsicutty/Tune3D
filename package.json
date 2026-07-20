@@ -1,0 +1,23 @@
+{
+  "name": "box3d-tuner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open https://localhost:5173/",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.15.0",
+    "@babylonjs/loaders": "^9.17.0",
+    "@frsource/babylon-box3d": "^1.1.0",
+    "box3d-wasm": "^0.2.0",
+    "pitchfinder": "^2.3.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^6.3.5"
+  }
+}
