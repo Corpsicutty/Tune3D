@@ -62,11 +62,20 @@ const RING_OUTER_BASE = new Color3(0.029, 0.318, 0.604); // #07519A
 const RING_INNER_EMISSION = new Color3(0.082, 0.549, 1.0); // #158CFF
 const RING_OUTER_EMISSION = new Color3(0.149, 0.608, 1.0); // #269BFF
 const CYAN = RING_CYAN;
-const CYAN_DIM = new Color3(0.12, 0.38, 0.62);
+const CYAN_DIM = new Color3(0.16, 0.48, 0.74);
 const GREEN = new Color3(0.337, 1.0, 0.482); // #56FF7B
 const IN_TUNE_CENTS = 5;
 const WARM_SHARP = new Color3(1.0, 0.541, 0.271); // #FF8A45
 const WARM_FLAT = new Color3(0.976, 0.541, 0.851); // #F98AD9
+
+function saturateColor(color: Color3, amount: number): Color3 {
+  const gray = (color.r + color.g + color.b) / 3;
+  return new Color3(
+    gray + (color.r - gray) * amount,
+    gray + (color.g - gray) * amount,
+    gray + (color.b - gray) * amount,
+  );
+}
 const IDLE_CYAN = new Color3(0.02, 0.169, 0.384); // #052B62 orb body
 const ORB_HIGHLIGHT = new Color3(0.682, 0.937, 1.0); // #AEEFFF
 
@@ -137,12 +146,52 @@ function makeGlowHaloMat(scene: Scene, name: string, color: Color3): StandardMat
   const mat = new StandardMaterial(name, scene);
   mat.diffuseColor = Color3.Black();
   mat.specularColor = Color3.Black();
-  mat.emissiveColor = color.scale(0.35);
-  mat.alpha = 0.035;
+  mat.emissiveColor = saturateColor(color, 1.15).scale(0.22);
+  mat.alpha = 0.022;
   mat.disableLighting = true;
   mat.backFaceCulling = false;
   mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   return mat;
+}
+
+/** Radial falloff disc — reads as bloom, not a solid sphere edge. */
+function makeSoftBallBloomMat(scene: Scene, name: string): StandardMaterial {
+  const size = 256;
+  const tex = new DynamicTexture(`${name}-tex`, { width: size, height: size }, scene, false);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.45)');
+  g.addColorStop(0.42, 'rgba(255,255,255,0.1)');
+  g.addColorStop(0.68, 'rgba(255,255,255,0.025)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  tex.hasAlpha = true;
+  tex.update();
+
+  const mat = new StandardMaterial(name, scene);
+  mat.emissiveTexture = tex;
+  mat.opacityTexture = tex;
+  mat.useAlphaFromDiffuseTexture = true;
+  mat.disableLighting = true;
+  mat.backFaceCulling = false;
+  mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  mat.alpha = 0.85;
+  return mat;
+}
+
+function createBallBloomHalo(scene: Scene, root: TransformNode): { ballGlow: Mesh; ballGlowMat: StandardMaterial } {
+  const ballGlowMat = makeSoftBallBloomMat(scene, 'ball-bloom-halo');
+  const ballGlow = MeshBuilder.CreatePlane(
+    'ball-bloom-halo',
+    { width: BALL_RADIUS * 5.5, height: BALL_RADIUS * 5.5 },
+    scene,
+  );
+  ballGlow.parent = root;
+  ballGlow.position.z = -0.02;
+  ballGlow.material = ballGlowMat;
+  return { ballGlow, ballGlowMat };
 }
 
 
@@ -150,20 +199,24 @@ function makeGlowHaloMat(scene: Scene, name: string, color: Color3): StandardMat
 function makeBallMat(scene: Scene): PBRMaterial {
   const mat = new PBRMaterial('ball-glass', scene);
   mat.metallic = 0;
-  mat.roughness = 0.05;
-  mat.alpha = 1;
-  mat.albedoColor = IDLE_CYAN;
+  mat.roughness = 0.035;
+  mat.alpha = 0.88;
+  mat.albedoColor = IDLE_CYAN.scale(0.35);
   mat.emissiveColor = new Color3(0.031, 0.49, 1.0);
-  mat.emissiveIntensity = 0.35;
-  mat.environmentIntensity = 0.9;
-  mat.directIntensity = 1.2;
-  mat.specularIntensity = 0.7;
+  mat.emissiveIntensity = 0.12;
+  mat.environmentIntensity = 0.95;
+  mat.directIntensity = 1.25;
+  mat.specularIntensity = 0.75;
   mat.clearCoat.isEnabled = true;
-  mat.clearCoat.intensity = 0.85;
-  mat.clearCoat.roughness = 0.012;
+  mat.clearCoat.intensity = 0.92;
+  mat.clearCoat.roughness = 0.008;
   mat.clearCoat.tintColor = ORB_HIGHLIGHT;
   mat.backFaceCulling = false;
   mat.indexOfRefraction = 1.46;
+  mat.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
+  mat.subSurface.isTranslucencyEnabled = true;
+  mat.subSurface.translucencyIntensity = 0.42;
+  mat.subSurface.tintColor = new Color3(0.02, 0.12, 0.35);
   return mat;
 }
 
@@ -171,29 +224,60 @@ function makeBallCoreMat(scene: Scene): StandardMaterial {
   const mat = new StandardMaterial('ball-core', scene);
   mat.diffuseColor = Color3.Black();
   mat.specularColor = Color3.Black();
-  mat.emissiveColor = new Color3(0.03, 0.35, 1.0);
-  mat.alpha = 0.55;
+  mat.emissiveColor = IDLE_CYAN.scale(1.2);
+  mat.alpha = 0.88;
   mat.disableLighting = true;
   mat.backFaceCulling = false;
   mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   return mat;
 }
 
+function makeInnerHotspotMat(scene: Scene): StandardMaterial {
+  const mat = new StandardMaterial('ball-hotspot', scene);
+  mat.diffuseColor = Color3.Black();
+  mat.specularColor = Color3.Black();
+  mat.emissiveColor = GREEN.scale(2.5);
+  mat.alpha = 0.95;
+  mat.disableLighting = true;
+  mat.backFaceCulling = false;
+  return mat;
+}
+
+function addBallInnerGlow(
+  scene: Scene,
+  root: TransformNode,
+): { coreMats: StandardMaterial[]; innerHotspotMat: StandardMaterial } {
+  const coreMat = makeBallCoreMat(scene);
+  const core = MeshBuilder.CreateSphere('ball-inner-core', { diameter: BALL_RADIUS * 1.58, segments: 28 }, scene);
+  core.parent = root;
+  core.position.set(BALL_RADIUS * 0.1, BALL_RADIUS * 0.14, -BALL_RADIUS * 0.06);
+  core.material = coreMat;
+
+  const innerHotspotMat = makeInnerHotspotMat(scene);
+  const hotspot = MeshBuilder.CreateSphere('ball-inner-hotspot', { diameter: BALL_RADIUS * 1.02, segments: 24 }, scene);
+  hotspot.parent = root;
+  hotspot.material = innerHotspotMat;
+
+  return { coreMats: [coreMat], innerHotspotMat };
+}
+
 
 
 function ballTuneColor(cents: number, hasSignal: boolean): Color3 {
-  if (!hasSignal) return IDLE_CYAN;
+  if (!hasSignal) return saturateColor(IDLE_CYAN, 1.12);
   const abs = Math.abs(cents);
-  if (abs <= IN_TUNE_CENTS) return GREEN;
+  if (abs <= IN_TUNE_CENTS) return saturateColor(GREEN, 1.18);
   const warmEnd = cents >= 0 ? WARM_SHARP : WARM_FLAT;
   const blend = Math.min((abs - IN_TUNE_CENTS) / (CENTS_SPAN - IN_TUNE_CENTS), 1);
-  return Color3.Lerp(GREEN, warmEnd, blend);
+  const eased = Math.pow(blend, 0.5);
+  return saturateColor(Color3.Lerp(GREEN, warmEnd, eased), 1.22);
 }
 
 
 function applyBallColor(
   shellMat: PBRMaterial | null,
   coreMats: Material[],
+  innerHotspotMat: StandardMaterial,
   color: Color3,
   hasSignal: boolean,
   cents: number,
@@ -201,25 +285,36 @@ function applyBallColor(
   volumeLevel: number,
 ): void {
   const inTune = hasSignal && Math.abs(cents) <= IN_TUNE_CENTS;
+  const absCents = Math.abs(cents);
+  const tuneBlend = hasSignal
+    ? Math.min(Math.max(absCents - IN_TUNE_CENTS, 0) / (CENTS_SPAN - IN_TUNE_CENTS), 1)
+    : 0;
+
   if (shellMat) {
-    shellMat.albedoColor = Color3.Lerp(IDLE_CYAN, color.scale(0.35), hasSignal ? 0.45 : 0);
-    shellMat.emissiveColor = Color3.Lerp(new Color3(0.031, 0.49, 1.0), color, hasSignal ? 0.35 : 0.1);
-    shellMat.emissiveIntensity = (hasSignal ? 0.1 : 0.14) * breathe;
-    shellMat.roughness = hasSignal ? 0.045 : 0.055;
-    shellMat.alpha = 1;
-    shellMat.metallic = 0;
-    shellMat.indexOfRefraction = 1.46;
+    shellMat.albedoColor = Color3.Lerp(IDLE_CYAN.scale(0.28), color.scale(0.32), hasSignal ? 0.78 : 0);
+    shellMat.emissiveColor = Color3.Lerp(new Color3(0.02, 0.18, 0.45), color, hasSignal ? 0.55 : 0.1);
+    shellMat.emissiveIntensity = (hasSignal ? 0.08 : 0.1) * breathe;
+    shellMat.roughness = 0.03;
+    shellMat.alpha = hasSignal ? 0.82 : 0.86;
+    shellMat.subSurface.translucencyIntensity = hasSignal ? 0.48 : 0.38;
     if (!shellMat.clearCoat.isEnabled) shellMat.clearCoat.isEnabled = true;
-    shellMat.clearCoat.intensity = inTune ? 0.88 : 0.78;
-    shellMat.clearCoat.roughness = 0.016;
+    shellMat.clearCoat.intensity = inTune ? 1.0 : 0.88;
     shellMat.clearCoat.tintColor = inTune ? GREEN : ORB_HIGHLIGHT;
   }
-  const coreAlpha = 0.42 + volumeLevel * 0.12 + (hasSignal ? 0 : breathe * 0.04);
-  const coreTint = color.scale(hasSignal ? 0.55 : 0.45);
+
+  const hotspotStrength = inTune ? 5.8 : hasSignal ? 3.6 + tuneBlend * 1.5 : 1.5;
+  const coreStrength = inTune ? 3.5 : hasSignal ? 2.4 + tuneBlend * 1.1 : 1.0;
+  const hotspotTint = (hasSignal ? color : IDLE_CYAN).scale(hotspotStrength * breathe);
+  const coreTint = (hasSignal ? color : IDLE_CYAN).scale(coreStrength * breathe);
+
+  innerHotspotMat.emissiveColor = hotspotTint;
+  innerHotspotMat.alpha = hasSignal ? 0.98 : 0.75;
+
+  const coreAlpha = 0.78 + volumeLevel * 0.18 + (inTune ? 0.12 : 0);
   for (const coreMat of coreMats) {
     if (coreMat instanceof PBRMaterial) {
       coreMat.emissiveColor = coreTint;
-      coreMat.emissiveIntensity = (hasSignal ? 0.18 : 0.22) * breathe;
+      coreMat.emissiveIntensity = (inTune ? 2.2 : hasSignal ? 1.5 : 0.6) * breathe;
       coreMat.alpha = coreAlpha;
     } else if (coreMat instanceof StandardMaterial) {
       coreMat.emissiveColor = coreTint;
@@ -232,6 +327,7 @@ type BallVisual = {
   root: TransformNode;
   shellMat: PBRMaterial | null;
   coreMats: Material[];
+  innerHotspotMat: StandardMaterial;
   ballGlow: Mesh;
   ballGlowMat: StandardMaterial;
 };
@@ -245,25 +341,13 @@ function createProceduralBallVisual(scene: Scene, parent: TransformNode): BallVi
   ball.parent = root;
   ball.material = ballMat;
 
-  const ballCoreMat = makeBallCoreMat(scene);
-  const ballCore = MeshBuilder.CreateSphere('ball-core', { diameter: BALL_RADIUS * 1.38, segments: 24 }, scene);
-  ballCore.parent = root;
-  ballCore.position.set(BALL_RADIUS * 0.24, BALL_RADIUS * 0.3, -BALL_RADIUS * 0.2);
-  ballCore.material = ballCoreMat;
+  const { coreMats, innerHotspotMat } = addBallInnerGlow(scene, root);
+  const { ballGlow, ballGlowMat } = createBallBloomHalo(scene, root);
 
-  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
-  ballGlowMat.alpha = 0.08;
-  const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 2.8, segments: 24 }, scene);
-  ballGlow.parent = root;
-  ballGlow.material = ballGlowMat;
-
-  return { root, shellMat: ballMat, coreMats: [ballCoreMat], ballGlow, ballGlowMat };
+  return { root, shellMat: ballMat, coreMats, innerHotspotMat, ballGlow, ballGlowMat };
 }
 
 async function loadBallVisual(scene: Scene, parent: TransformNode): Promise<BallVisual> {
-  const ballGlowMat = makeGlowHaloMat(scene, 'ball-glow-mat', IDLE_CYAN);
-  ballGlowMat.alpha = 0.1;
-
   try {
     const result = await SceneLoader.ImportMeshAsync('', BALL_GLB_URL, '', scene);
     const root = new TransformNode('tuner-ball-root', scene);
@@ -304,19 +388,15 @@ async function loadBallVisual(scene: Scene, parent: TransformNode): Promise<Ball
     const shellMat = makeBallMat(scene);
     shellMesh.material = shellMat;
 
-    const coreMats: Material[] = [];
-    for (let i = 0; i < inclusionMeshes.length; i++) {
-      inclusionMeshes[i].name = `tuner-ball-inclusion-${i}`;
-      const coreMat = makeBallCoreMat(scene);
-      inclusionMeshes[i].material = coreMat;
-      coreMats.push(coreMat);
+    // Hide GLB inclusions — use vibrant procedural inner glow for readable tuning feedback.
+    for (const inc of inclusionMeshes) {
+      inc.setEnabled(false);
     }
 
-    const ballGlow = MeshBuilder.CreateSphere('ball-glow', { diameter: BALL_RADIUS * 2.8, segments: 24 }, scene);
-    ballGlow.parent = root;
-    ballGlow.material = ballGlowMat;
+    const { coreMats, innerHotspotMat } = addBallInnerGlow(scene, root);
+    const { ballGlow, ballGlowMat } = createBallBloomHalo(scene, root);
 
-    return { root, shellMat, coreMats, ballGlow, ballGlowMat };
+    return { root, shellMat, coreMats, innerHotspotMat, ballGlow, ballGlowMat };
   } catch (err) {
     console.warn('Failed to load tuner marble GLB, using procedural fallback:', err);
     return createProceduralBallVisual(scene, parent);
@@ -561,7 +641,7 @@ function ringMetaForCents(cents: number, index: number): {
     baseIntensity: isOuter ? 0.32 : major ? 0.18 : 0.07,
     baseColor: Color3.Lerp(CYAN_DIM, CYAN, dimFactor),
     glowScale: isOuter ? 1 : major ? 0.85 : 0.25,
-    proximityWidth: isCenter ? 0.22 : isMinor ? 0.1 : 0.18,
+    proximityWidth: isCenter ? 0.32 : isMinor ? 0.16 : 0.28,
   };
 }
 
@@ -586,7 +666,7 @@ function ringGlassPreset(cents: number): {
     return {
       base: RING_OUTER_BASE,
       emission: RING_OUTER_EMISSION,
-      emissionStrength: 2.2,
+      emissionStrength: 1.85,
       roughness: 0.1,
       coatIntensity: 0.55,
       specularIntensity: 0.55,
@@ -596,7 +676,7 @@ function ringGlassPreset(cents: number): {
     return {
       base: RING_INNER_BASE,
       emission: RING_INNER_EMISSION,
-      emissionStrength: 1.4,
+      emissionStrength: 1.2,
       roughness: 0.12,
       coatIntensity: 0.42,
       specularIntensity: 0.48,
@@ -605,7 +685,7 @@ function ringGlassPreset(cents: number): {
   return {
     base: RING_INNER_BASE.scale(0.85),
     emission: RING_INNER_EMISSION.scale(0.75),
-    emissionStrength: 0.55,
+    emissionStrength: 0.48,
     roughness: 0.16,
     coatIntensity: 0.28,
     specularIntensity: 0.38,
@@ -641,7 +721,7 @@ function buildProceduralRings(scene: Scene, tunerRoot: TransformNode): RingVisua
       orientToCamera(dot);
       const centerMat = new StandardMaterial('center-zero-mat', scene);
       centerMat.diffuseColor = Color3.Black();
-      centerMat.emissiveColor = GREEN.scale(1.2);
+      centerMat.emissiveColor = GREEN.scale(1.45);
       centerMat.disableLighting = true;
       dot.material = centerMat;
       mesh = dot;
@@ -860,15 +940,15 @@ async function buildCircleTuner(scene: Scene, root: TransformNode): Promise<{
 export function setupTunerBloom(scene: Scene, camera: Camera): DefaultRenderingPipeline {
   const pipeline = new DefaultRenderingPipeline('tuner-bloom', true, scene, [camera]);
   pipeline.bloomEnabled = true;
-  pipeline.bloomThreshold = 0.45;
-  pipeline.bloomWeight = 0.65;
+  pipeline.bloomThreshold = 0.44;
+  pipeline.bloomWeight = 0.68;
   pipeline.bloomKernel = 64;
   pipeline.bloomScale = 0.7;
   pipeline.fxaaEnabled = true;
   pipeline.glowLayerEnabled = false;
   pipeline.imageProcessingEnabled = true;
-  pipeline.imageProcessing.exposure = 1.0;
-  pipeline.imageProcessing.contrast = 1.05;
+  pipeline.imageProcessing.exposure = 1.04;
+  pipeline.imageProcessing.contrast = 1.08;
   return pipeline;
 }
 
@@ -880,7 +960,7 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
   const { tunerRoot, rings } = await buildCircleTuner(scene, root);
 
-  const { root: ballRoot, shellMat, coreMats, ballGlow, ballGlowMat } = await loadBallVisual(scene, tunerRoot);
+  const { root: ballRoot, shellMat, coreMats, innerHotspotMat, ballGlow, ballGlowMat } = await loadBallVisual(scene, tunerRoot);
 
 
 
@@ -1040,13 +1120,15 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
 
     const breathe = 0.85 + Math.sin(time * 1.1) * 0.15;
 
-    applyBallColor(shellMat, coreMats, ballColor, hasSignal, displayCents, breathe, volumeLevel);
+    applyBallColor(shellMat, coreMats, innerHotspotMat, ballColor, hasSignal, displayCents, breathe, volumeLevel);
 
-    ballGlowMat.emissiveColor.copyFrom(ballColor.scale(hasSignal ? 0.35 : 0.22));
-    ballGlowMat.alpha = (0.06 + volumeLevel * 0.1) * (hasSignal ? 1 : breathe);
+    const inTune = hasSignal && Math.abs(displayCents) <= IN_TUNE_CENTS;
+    const glowTint = inTune ? 1.35 : hasSignal ? 1.0 : 0.35;
+    ballGlowMat.emissiveColor.copyFrom(ballColor.scale(glowTint));
+    ballGlowMat.alpha = hasSignal ? 0.55 + volumeLevel * 0.25 + (inTune ? 0.15 : 0) : 0.18 * breathe;
 
     const ballDist = Math.hypot(ballX, ballY);
-    const glowStrength = hasSignal ? 0.75 : 0.45 * breathe;
+    const glowStrength = hasSignal ? 0.95 : 0.5 * breathe;
 
     for (const ring of rings) {
       let proximity: number;
@@ -1056,35 +1138,39 @@ export async function createTunerVisual(scene: Scene): Promise<TunerVisual> {
         const ringR = ringRadiusForCents(ring.cents);
         proximity = Math.max(0, 1 - Math.abs(ballDist - ringR) / ring.proximityWidth);
       }
+      // Smoothstep — punchy peak when ball crosses a ring
+      proximity = proximity * proximity * (3 - 2 * proximity);
 
       const isOuter = ring.cents === CENTS_SPAN;
       const breatheBoost = isOuter ? breathe : 1;
       const targetGlow = proximity * glowStrength * breatheBoost * ring.glowScale;
-      ring.glowLevel += (targetGlow - ring.glowLevel) * Math.min(1, dt * 10);
+      ring.glowLevel += (targetGlow - ring.glowLevel) * Math.min(1, dt * 14);
 
       const t = ring.glowLevel;
-      const ringTint = hasSignal ? ballColor : CYAN;
-      Color3.LerpToRef(ring.baseColor, ringTint, t * 0.4, _lit);
+      const ringTint = saturateColor(hasSignal ? ballColor : CYAN, hasSignal ? 1.28 : 1.12);
+      const colorMix = Math.min(1, t * 1.05 + (hasSignal && t > 0.12 ? 0.4 : 0));
+      Color3.LerpToRef(ring.baseColor, ringTint, colorMix, _lit);
 
       const coreIntensity =
-        (ring.baseIntensity + t * 0.65 * ring.glowScale) * (isOuter ? breatheBoost : 1);
+        (ring.baseIntensity + t * 1.15 * ring.glowScale) * (isOuter ? breatheBoost : 1);
 
       if (ring.isGlass && ring.mat instanceof PBRMaterial) {
         const preset = ringGlassPreset(ring.cents);
-        ring.mat.emissiveColor = Color3.Lerp(preset.emission, _lit, t * 0.35);
-        ring.mat.emissiveIntensity = preset.emissionStrength + coreIntensity * (0.55 + t * 0.75);
-        ring.mat.albedoColor = Color3.Lerp(preset.base, _lit, t * 0.18);
-        ring.mat.alpha = 0.92 + t * 0.06;
+        ring.mat.emissiveColor = Color3.Lerp(preset.emission, ringTint, colorMix * 0.96);
+        ring.mat.emissiveIntensity = preset.emissionStrength + coreIntensity * (0.82 + t * 0.55);
+        ring.mat.albedoColor = Color3.Lerp(preset.base, ringTint, colorMix * 0.82);
+        ring.mat.alpha = 0.94 + t * 0.04;
         if (ring.flareMesh?.material instanceof PBRMaterial) {
-          ring.flareMesh.material.emissiveIntensity = (0.55 + t * 0.85) * breatheBoost;
+          ring.flareMesh.material.emissiveColor = Color3.Lerp(preset.emission, ringTint, colorMix * 0.9);
+          ring.flareMesh.material.emissiveIntensity = (preset.emissionStrength * 1.05 + t * 1.1) * breatheBoost;
         } else if (ring.flareMesh?.material instanceof StandardMaterial) {
-          ring.flareMesh.material.emissiveColor = _lit.scale(0.65);
+          ring.flareMesh.material.emissiveColor = ringTint.scale(0.85 + t * 0.55);
         }
       } else if (ring.mat instanceof StandardMaterial) {
-        ring.mat.emissiveColor.copyFrom(_lit.scale(0.45 + coreIntensity * 0.35));
+        ring.mat.emissiveColor.copyFrom(ringTint.scale(0.75 + coreIntensity * 0.55));
         if (ring.glowMat && ring.glow) {
-          ring.glowMat.emissiveColor.copyFrom(_lit.scale((0.15 + t * 0.35) * ring.glowScale));
-          ring.glowMat.alpha = (0.025 + t * 0.08) * (isOuter ? breatheBoost : 1) * ring.glowScale;
+          ring.glowMat.emissiveColor.copyFrom(ringTint.scale((0.28 + t * 0.65) * ring.glowScale));
+          ring.glowMat.alpha = (0.02 + t * 0.12) * (isOuter ? breatheBoost : 1) * ring.glowScale;
           ring.glow.scaling.setAll(1 + t * 0.05 * ring.glowScale);
         }
       }

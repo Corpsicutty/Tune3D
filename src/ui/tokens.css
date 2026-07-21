@@ -13,18 +13,18 @@
   --color-text-muted: #5a7090;
   --color-text-dim: #4a6080;
 
-  --color-cyan: #58d4ff;
-  --color-cyan-bright: #7ee4ff;
-  --color-cyan-dim: #3a9ec8;
+  --color-cyan: #62dcff;
+  --color-cyan-bright: #88e8ff;
+  --color-cyan-dim: #42aad8;
   --color-violet: #9b6dff;
   --color-violet-dim: #6b48c4;
 
-  --color-green: #3de88a;
-  --color-green-glow: rgba(61, 232, 138, 0.55);
-  --color-sharp: #ffb347;
-  --color-sharp-glow: rgba(255, 179, 71, 0.55);
-  --color-flat: #ffc850;
-  --color-flat-glow: rgba(255, 200, 80, 0.55);
+  --color-green: #42f094;
+  --color-green-glow: rgba(66, 240, 148, 0.6);
+  --color-sharp: #ffbc55;
+  --color-sharp-glow: rgba(255, 188, 85, 0.6);
+  --color-flat: #ffd060;
+  --color-flat-glow: rgba(255, 208, 96, 0.6);
 
   /* Spacing — 8px grid */
   --space-1: 4px;

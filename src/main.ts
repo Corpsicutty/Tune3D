@@ -152,18 +152,15 @@ try {
         : null;
 
     const dir = centsDirection(cents);
+    const centsLabel = `${formatCents(cents)} ¢`;
     const directionText =
       dir === 'in-tune'
         ? stringHint
           ? `${stringHint} in tune ✓`
           : `Centered on ${noteName}${octave} ✓`
-        : dir === 'sharp'
-          ? stringHint
-            ? `${stringHint} — sharp ♯`
-            : `${noteName}${octave} — sharp ♯`
-          : stringHint
-            ? `${stringHint} — flat ♭`
-            : `${noteName}${octave} — a bit flat ♭`;
+        : stringHint
+          ? `${stringHint} · ${centsLabel}`
+          : centsLabel;
 
     setReadoutActive(readoutEls, {
       noteText: `${noteName}${octave}`,
